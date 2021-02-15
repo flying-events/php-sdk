@@ -1,0 +1,19 @@
+{
+    "name": "flying-events/php-sdk",
+    "type": "library",
+    "description": "PHP SDK for working with FLying Events API",
+    "keywords": ["cloud","webhooks"],
+    "homepage": "https://flying.events",
+    "license": "MIT",
+    "require": {
+        "php": "7.1",
+        "guzzlehttp/guzzle": "^6.1|^7.0",
+        "nesbot/carbon": "2.*",
+        "myclabs/php-enum": "^1.7"
+    },
+    "autoload": {
+        "psr-4": {
+            "FlyingEvents\\": "src/"
+        }
+    }
+}
