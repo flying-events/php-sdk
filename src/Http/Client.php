@@ -14,7 +14,7 @@ class Client extends GuzzleClient
     private const API_BASE_URL = "https://app.flying.events/api/";
     private const SUBSCRIBER_REQUEST_TOKEN = "subscriber/%s/request-token";
     private const APPLICATION_REQUEST_TOKEN = "application/request-token";
-    private const PUBLISH_EVENT = "worker/publish-event";
+    private const SEND_EVENT = "worker/send-event";
 
 
   public function requestApplicationToke($body){
@@ -53,7 +53,7 @@ class Client extends GuzzleClient
 
     public function sendEvent($event, $authToken){
         
-        $url = self::API_BASE_URL . self::PUBLISH_EVENT;
+        $url = self::API_BASE_URL . self::SEND_EVENT;
         $headers = [
             'Authorization' => 'Bearer ' . $authToken,
             'Content-Type' => 'application/json',
