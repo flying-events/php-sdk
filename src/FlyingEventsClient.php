@@ -2,14 +2,8 @@
 
 namespace FlyingEvents;
 
-use Carbon\Carbon;
-use FlyingEvents\Exceptions\UnauthorizedException;
-use FlyingEvents\Http\Client as HttpClient;
-use FlyingEvents\Event;
-use FlyingEvents\Environment;
-use FlyingEvents\Exceptions\EnvironmentNotFoundException;
-use FlyingEvents\Exceptions\EventNotFoundException;
-use FlyingEvents\Exceptions\IllegalArgumentException;
+use FlyingEvents\Exceptions\FlyingEventsException;
+use FlyingEvents\Http\CurlClient;
 
 class FlyingEventsClient
 {
@@ -17,26 +11,40 @@ class FlyingEventsClient
     protected $applicationKey;
     protected $applicationSecret;
     protected $authToken;
-    protected $reAuthTime;
-    protected $authTimeoutSeconds;
     protected $client;
     protected $environment;
 
-    public function __construct($params){
-
+    public function __construct($params)
+    {
         $this->applicationKey = $params['applicationKey'];
         $this->applicationSecret = $params['applicationSecret'];
         $this->environment = $params['environment'];
-        if($this->environment !== Environment::LIVE() && $this->environment !== Environment::TEST()){
-            throw new EnvironmentNotFoundException("Error with environment - please use available environment types (LIVE, TEST)");
+        if ($this->environment !== Environment::LIVE() && $this->environment !== Environment::TEST()) {
+            throw new FlyingEventsException("Error with environment - please use available environment types (LIVE, TEST)");
         }
 
-        $this->authTimeoutSeconds = 12 * 60 * 60; // 12 hour default
-        // set reauthorize time to force an authentication to take place
-        $this->reAuthTime = Carbon::now('UTC')->subSeconds($this->authTimeoutSeconds);
-
-        $this->client = new HttpClient();
+        $this->client = new CurlClient();
         $this->authorizeAccount();
+    }
+
+    /**
+     * Request new authorization token if existing token expired.
+     *
+     * @throws FlyingEventsException
+     */
+    protected function authorizeAccount()
+    {
+        if ($this->isJwtExpired()) {
+            $body = [
+                'applicationKey' => $this->applicationKey,
+                'applicationSecret' => $this->applicationSecret
+            ];
+            $response = $this->client->postRequest('application/request-token', $body, null);
+            if ($response['statusCode'] == 401) {
+                throw new FlyingEventsException("Invalid application credentials");
+            }
+            $this->authToken = $this->client->extractHeader($response['header'], 'Authorization');
+        }
     }
 
     /**
@@ -44,58 +52,55 @@ class FlyingEventsClient
      *
      * @param $params
      * @return string
-     * @throws IllegalArgumentException
+     * @throws FlyingEventsException
      */
-    public function requestSubscriberToken($params){
-        echo $params['subscriberId'];
-        if(!is_string($params['subscriberId']) || !isset($params['subscriberId']) || $params['subscriberId'] == ''){
-            throw new IllegalArgumentException("subscriberId must be a non- empty string");
+    public function requestSubscriberToken($params)
+    {
+        if (!is_string($params['subscriberId']) || !isset($params['subscriberId']) || $params['subscriberId'] == '') {
+            throw new FlyingEventsException("subscriberId must be a non- empty string");
         }
-        try {
-            $this->authorizeAccount();
-        } catch (UnauthorizedException $e) {
-            echo $e;
-        }
-        return $this->client->requestSubscriberToken($params, $this->environment,	$this->authToken);
+        $this->authorizeAccount();
+        $response = $this->client->postRequest('subscriber/' . $params['subscriberId']
+            . '/request-token', ['environment' => $this->environment], $this->authToken);
+
+        return $this->client->extractHeader($response['header'], 'Authorization');
     }
 
+
     /**
-     * Publish new event.
+     * Send new event.
      *
      * @param array $event
      *
-     * @throws EventNotFoundException
+     * @return bool
+     * @throws FlyingEventsException
      */
-    public function sendEvent($event){
+    public function sendEvent(array $event)
+    {
         $event['environment'] = $this->environment;
         $eventObj = new Event($event);
 
-        try {
-            $this->authorizeAccount();
-        } catch (UnauthorizedException $e) {
-            echo $e;
+        $this->authorizeAccount();
+        $response = $this->client->postRequest('worker/send-event', $eventObj->arraySerialize(), $this->authToken);
+        if ($response == null) {
+            $failSafeResponse = $this->client->postRequest('failsafe/send-event', $eventObj->arraySerialize(), $this->authToken);
+            if ($failSafeResponse == null || floor($failSafeResponse['statusCode'] / 100) != 2) {
+                return false;
+            }
+        } else if (floor($response['statusCode'] / 100) != 2) {
+            throw new FlyingEventsException($response['body']);
         }
-        $this->client->sendEvent($eventObj, $this->authToken);
+        return true;
     }
 
-    /**
-     * Request new authorization token if existing token expired.
-     *
-     * @throws UnauthorizedException
-     */
-    protected function authorizeAccount(){
-        if (Carbon::now('UTC')->timestamp < $this->reAuthTime->timestamp) {
-            return;
+    private function isJwtExpired()
+    {
+        if ($this->authToken == null) {
+            return true;
         }
-
-        $body = [
-            'applicationKey' => $this->applicationKey,
-            'applicationSecret' => $this->applicationSecret
-        ];
-
-        $this->authToken = $this->client->requestApplicationToke($body);
-
-        $this->reAuthTime = Carbon::now('UTC');
-        $this->reAuthTime->addSeconds($this->authTimeoutSeconds);
+        $requestBufferInSeconds = 30;
+        list($header, $payload, $signature) = explode(".", $this->authToken);
+        $payload = json_decode(base64_decode($payload), true);
+        return time() > $payload['exp'] + $requestBufferInSeconds;
     }
 }

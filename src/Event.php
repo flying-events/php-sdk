@@ -2,10 +2,9 @@
 namespace FlyingEvents;
 
 
-use JsonSerializable;
-use FlyingEvents\Exceptions\IllegalArgumentException;
+use FlyingEvents\Exceptions\FlyingEventsException;
 
-class Event implements JsonSerializable
+class Event
 {
 	
 	protected $eventName;
@@ -24,7 +23,7 @@ class Event implements JsonSerializable
 		if($this->isValidString($eventName)){
 			$this->eventName = $eventName;
 		}else{
-			throw new IllegalArgumentException("eventName must be a non empty string"); 
+			throw new FlyingEventsException("eventName must be a non empty string");
 		}
 	}
 
@@ -32,7 +31,7 @@ class Event implements JsonSerializable
 		if($this->isValidString($payload)){
 			$this->payload = $payload;
 		}else{
-			throw new IllegalArgumentException("payload must be a non empty string"); 
+			throw new FlyingEventsException("payload must be a non empty string");
 		}
 	}
 
@@ -40,26 +39,25 @@ class Event implements JsonSerializable
 		if($this->isValidArray($subscribersIds)){
 			$this->subscribersIds = $subscribersIds;
 		}else{
-			throw new IllegalArgumentException("subscribersIds must be a non empty array of string IDs"); 
+			throw new FlyingEventsException("subscribersIds must be a non empty array of string IDs");
 		}	
 	}
 
 	protected function isValidString($stringVar){
-		return (is_string($stringVar) && isset($stringVar) && $stringVar !== '');
+		return (is_string($stringVar) && $stringVar !== '');
 	}
 
 	protected function isValidArray($arrayVar){
 		if($arrayVar && is_array($arrayVar)){
 			foreach ($arrayVar as $value){ 
-  				if(!$this->isValidString($value))
-  					return false;
+  				if(!$this->isValidString($value)){
+                    return false;
+                }
   			}
   			return true;
 		}
 		return false;
 	}
-
-	
 
 	public function setEnvironment($environment){
 		$this->environment = $environment;
@@ -69,22 +67,19 @@ class Event implements JsonSerializable
 		return $this->eventName;
 	}
 
-
 	public function getPayload(){
 		return $this->payload;
 	}
-
 
 	public function getSubscribersIds(){
 		return $this->subscribersIds;
 	}
 
-
 	public function getEnvironment(){
 		return $this->environment;
 	}
 
-	public function jsonSerialize()
+	public function arraySerialize()
     {
         return 
         [

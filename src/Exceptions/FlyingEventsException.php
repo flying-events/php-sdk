@@ -1,8 +1,10 @@
 <?php
 
 namespace FlyingEvents\Exceptions;
+
 use Exception;
 
-class EventNotFoundException extends Exception{
+class FlyingEventsException extends Exception
+{
 
 }
