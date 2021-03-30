@@ -41,8 +41,14 @@ class CurlClient
 
     public function extractHeader($headers, $headerName)
     {
-        if ($headers && strpos($headers, $headerName . ': ') > -1) {
-            return explode("\n", explode($headerName . ': ', $headers)[1])[0];
+        $headers = explode("\n", $headers);
+        foreach ($headers as $header) {
+            if($header && strpos($header,  ':') > -1){
+                list($key, $value) = explode(':', $header, 2);
+                if(strcasecmp(trim($key), $headerName) == 0){
+                    return trim($value);
+                }
+            }
         }
         return null;
     }
